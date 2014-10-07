@@ -14,6 +14,7 @@
 #    under the License.
 
 
+import contextlib
 import os
 import re
 import socket
@@ -38,7 +39,7 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 
-# All functions are called from deploy() directly or indirectly.
+# All functions are called from deploy_*() directly or indirectly.
 # They are split for stub-out.
 
 def discovery(portal_address, portal_port):
@@ -288,6 +289,10 @@ def work_on_disk(dev, root_mb, swap_mb, ephemeral_mb, ephemeral_format,
         raise exception.InstanceDeployFailure(_("Parent device '%s' not found")
                                               % dev)
 
+    image_mb = get_image_mb(image_path)
+    if image_mb > root_mb:
+        root_mb = image_mb
+
     # the only way for preserve_ephemeral to be set to true is if we are
     # rebuilding an instance with --preserve_ephemeral.
     commit = not preserve_ephemeral
@@ -327,10 +332,22 @@ def work_on_disk(dev, root_mb, swap_mb, ephemeral_mb, ephemeral_format,
     return root_uuid
 
 
-def deploy(address, port, iqn, lun, image_path,
-           root_mb, swap_mb, ephemeral_mb, ephemeral_format, node_uuid,
-           preserve_ephemeral=False):
-    """All-in-one function to deploy a node.
+def write_to_disk(image_path, dev):
+    """Create partitions and copy an image to the disk's lun directly.
+    :param dev: Path for the device to work on.
+    :param image_path: Path for the instance's disk image.
+    """
+    if not is_block_device(dev):
+        raise exception.InstanceDeployFailure(_("Parent device '%s' not found")
+                                              % dev)
+    dd(image_path, dev)
+
+
+def deploy_partition_image(address, port, iqn, lun, image_path,
+                           root_mb, swap_mb, ephemeral_mb,
+                           ephemeral_format, node_uuid,
+                           preserve_ephemeral=False):
+    """Function to deploy partition images.
 
     :param address: The iSCSI IP address.
     :param port: The iSCSI port number.
@@ -339,41 +356,65 @@ def deploy(address, port, iqn, lun, image_path,
     :param image_path: Path for the instance's disk image.
     :param root_mb: Size of the root partition in megabytes.
     :param swap_mb: Size of the swap partition in megabytes.
-    :param ephemeral_mb: Size of the ephemeral partition in megabytes. If 0,
-        no ephemeral partition will be created.
-    :param ephemeral_format: The type of file system to format the ephemeral
-        partition.
-    :param node_uuid: node's uuid. Used for logging.
+    :param ephemeral_mb: Size of the ephemeral partition in megabytes.
+        If 0, no ephemeral partition will be created.
+    :param ephemeral_format: The type of file system to format the
+        ephemeral partition.
     :param preserve_ephemeral: If True, no filesystem is written to the
         ephemeral block device, preserving whatever content it had (if the
         partition table has not changed).
-    :returns: the UUID of the root partition.
+
     """
-    dev = get_dev(address, port, iqn, lun)
-    image_mb = get_image_mb(image_path)
-    if image_mb > root_mb:
-        root_mb = image_mb
-    discovery(address, port)
-    login_iscsi(address, port, iqn)
-    try:
+    with _iscsi_setup_and_handle_errors(address, port, iqn, lun) as dev:
         root_uuid = work_on_disk(dev, root_mb, swap_mb, ephemeral_mb,
                                  ephemeral_format, image_path, node_uuid,
                                  preserve_ephemeral)
+
+    return root_uuid
+
+
+def deploy_disk_image(address, port, iqn, lun, image_path):
+    """Function to deploy a disk image.
+
+    :param address: The iSCSI IP address.
+    :param port: The iSCSI port number.
+    :param iqn: The iSCSI qualified name.
+    :param lun: The iSCSI logical unit number.
+    :param image_path: Path for the instance's disk image.
+
+    """
+    with _iscsi_setup_and_handle_errors(address, port, iqn, lun) as dev:
+        write_to_disk(image_path, dev)
+
+
+@contextlib.contextmanager
+def _iscsi_setup_and_handle_errors(address, port, iqn, lun):
+    """Function that yields an iSCSI target device to work on.
+
+    :param address: The iSCSI IP address.
+    :param port: The iSCSI port number.
+    :param iqn: The iSCSI qualified name.
+    :param lun: The iSCSI logical unit number.
+
+    """
+    discovery(address, port)
+    login_iscsi(address, port, iqn)
+    dev = get_dev(address, port, iqn, lun)
+    try:
+        yield dev
     except processutils.ProcessExecutionError as err:
         with excutils.save_and_reraise_exception():
-            LOG.error(_LE("Deploy to address %s failed."), address)
-            LOG.error(_LE("Command: %s"), err.cmd)
-            LOG.error(_LE("StdOut: %r"), err.stdout)
-            LOG.error(_LE("StdErr: %r"), err.stderr)
+            LOG.error(_("Deploy to address %s failed.") % address)
+            LOG.error(_("Command: %s") % err.cmd)
+            LOG.error(_("StdOut: %r") % err.stdout)
+            LOG.error(_("StdErr: %r") % err.stderr)
     except exception.InstanceDeployFailure as e:
         with excutils.save_and_reraise_exception():
-            LOG.error(_LE("Deploy to address %s failed."), address)
+            LOG.error(_("Deploy to address %s failed.") % address)
             LOG.error(e)
     finally:
         logout_iscsi(address, port, iqn)
         delete_iscsi(address, port, iqn)
-
-    return root_uuid
 
 
 def notify_deploy_complete(address):

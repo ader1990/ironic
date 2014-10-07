@@ -574,7 +574,7 @@ class PXEDriverTestCase(db_base.DbTestCase):
             return root_uuid
 
         self.useFixture(fixtures.MonkeyPatch(
-                'ironic.drivers.modules.deploy_utils.deploy',
+                'ironic.drivers.modules.deploy_utils.deploy_partition_image',
                 fake_deploy))
 
         with task_manager.acquire(self.context, self.node.uuid) as task:
@@ -604,7 +604,7 @@ class PXEDriverTestCase(db_base.DbTestCase):
             raise exception.InstanceDeployFailure("test deploy error")
 
         self.useFixture(fixtures.MonkeyPatch(
-                'ironic.drivers.modules.deploy_utils.deploy',
+                'ironic.drivers.modules.deploy_utils.deploy_partition_image',
                 fake_deploy))
 
         with task_manager.acquire(self.context, self.node.uuid) as task:
@@ -630,7 +630,7 @@ class PXEDriverTestCase(db_base.DbTestCase):
             pass
 
         self.useFixture(fixtures.MonkeyPatch(
-                'ironic.drivers.modules.deploy_utils.deploy',
+                'ironic.drivers.modules.deploy_utils.deploy_partition_image',
                 fake_deploy))
 
         with task_manager.acquire(self.context, self.node.uuid) as task:

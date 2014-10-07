@@ -18,6 +18,7 @@ import os
 from oslo.config import cfg
 from oslo.utils import strutils
 
+from ironic.common import dhcp_factory
 from ironic.common import exception
 from ironic.common.i18n import _
 from ironic.common.i18n import _LE
@@ -122,10 +123,30 @@ def parse_instance_info(node):
     # Internal use only
     i_info['deploy_key'] = info.get('deploy_key')
 
+    deploy_disk = info.get('is_whole_disk_image', 'False')
+    err_msg_invalid = _("Can not validate PXE bootloader. Invalid parameter "
+                        "pxe_%(param)s. Reason: %(reason)s")
+    try:
+        i_info['is_whole_disk_image'] = strutils.bool_from_string(deploy_disk,
+                                                          strict=True)
+    except ValueError as e:
+        raise exception.InvalidParameterValue(
+            err_msg_invalid % {'param': 'deploy_disk', 'reason': e})
+
     i_info['swap_mb'] = info.get('swap_mb', 0)
     i_info['ephemeral_gb'] = info.get('ephemeral_gb', 0)
-    i_info['ephemeral_format'] = info.get('ephemeral_format')
 
+    if i_info['is_whole_disk_image']:
+        if int(i_info['swap_mb']) > 0 or int(i_info['ephemeral_gb']) > 0:
+            raise exception.Invalid(
+                _("Can't deploy a whole disk image with swap/ephemeral sizes, "
+                  "please adjust your flavor to only specify a "
+                  "root partition size for whole disk images."))
+            del i_info['swap_mb']
+            del i_info['ephemeral_mb']
+        return i_info
+
+    i_info['ephemeral_format'] = info.get('ephemeral_format')
     err_msg_invalid = _("Cannot validate parameter for iSCSI deploy. "
                         "Invalid parameter %(param)s. Reason: %(reason)s")
     for param in ('root_gb', 'swap_mb', 'ephemeral_gb'):
@@ -223,12 +244,15 @@ def get_deploy_info(node, **kwargs):
               'iqn': kwargs.get('iqn'),
               'lun': kwargs.get('lun', '1'),
               'image_path': _get_image_file_path(node.uuid),
-              'root_mb': 1024 * int(i_info['root_gb']),
-              'swap_mb': int(i_info['swap_mb']),
-              'ephemeral_mb': 1024 * int(i_info['ephemeral_gb']),
-              'preserve_ephemeral': i_info['preserve_ephemeral'],
-              'node_uuid': node.uuid,
              }
+
+    if not i_info['is_whole_disk_image']:
+        params.update({'root_mb': 1024 * int(i_info['root_gb']),
+                       'swap_mb': int(i_info['swap_mb']),
+                       'ephemeral_mb': 1024 * int(i_info['ephemeral_gb']),
+                       'preserve_ephemeral': i_info['preserve_ephemeral'],
+                       'node_uuid': node.uuid,
+                      })
 
     missing = [key for key in params if params[key] is None]
     if missing:
@@ -236,8 +260,9 @@ def get_deploy_info(node, **kwargs):
                 "Parameters %s were not passed to ironic"
                 " for deploy.") % missing)
 
-    # ephemeral_format is nullable
-    params['ephemeral_format'] = i_info.get('ephemeral_format')
+    if not i_info['is_whole_disk_image']:
+        # ephemeral_format is nullable
+        params['ephemeral_format'] = i_info.get('ephemeral_format')
 
     return params
 
@@ -299,9 +324,23 @@ def continue_deploy(task, **kwargs):
     LOG.info(_LI('Continuing deployment for node %(node)s, params %(params)s'),
                  {'node': node.uuid, 'params': params})
 
+    i_info = parse_instance_info(node)
+
     root_uuid = None
     try:
-        root_uuid = deploy_utils.deploy(**params)
+        if i_info['is_whole_disk_image']:
+            deploy_utils.deploy_disk_image(**params)
+            dhcp_opts = [{'opt_name': 'bootfile-name',
+                          'opt_value': None},
+                          {'opt_name': 'server-ip-address',
+                          'opt_value': None},
+                          {'opt_name': 'tftp-server',
+                          'opt_value': None}]
+            provider = dhcp_factory.DHCPFactory()
+            provider.update_dhcp(task, dhcp_opts)
+            manager_utils.node_set_boot_device(task, 'disk', persistent=True)
+        else:
+            root_uuid = deploy_utils.deploy_partition_image(**params)
     except Exception as e:
         LOG.error(_LE('Deploy failed for instance %(instance)s. '
                       'Error: %(error)s'),
