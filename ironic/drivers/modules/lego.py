@@ -27,6 +27,7 @@ Currently supported environments are:
 """
 
 import subprocess
+import time
 
 from oslo.config import cfg
 
@@ -41,9 +42,17 @@ from ironic.openstack.common import log as logging
 
 legoev3_opts = [
     cfg.StrOpt('lego_ev3_classes_jar',
-               default='/home/ubuntu/reBotcopy/reBot/ev3classes.jar:/home/'
-                       'ubuntu/reBotcopy/reBot/.',
-               help='lego jars')
+               default='/opt/stack/reBot/ev3classes.jar:/opt/stack/reBot/.',
+               help='lego jars'),
+    cfg.IntOpt('lego_press_time_on',
+               default='500',
+               help='Pressing time for power on.'),
+    cfg.IntOpt('lego_press_time_off',
+               default='7000',
+               help='Pressing time for power off.'),
+    cfg.StrOpt('lego_move_degrees',
+               default='1440',
+               help='Lego robotic arm move degrees.')
 ]
 
 CONF = cfg.CONF
@@ -96,10 +105,8 @@ def _bare_plastic_reset(address, port):
         LOG.debug("BarePlasticReset failed.")
 
 
-def _bare_plastic_rotate_motor(address, port, degrees, speed=None,
-                               acceleration=None):
-    args = ['BarePlasticRotateMotor', address, port, degrees, speed,
-            acceleration]
+def _bare_plastic_rotate_motor(address, port, degrees):
+    args = ['BarePlasticRotateMotor', address, port, degrees]
     (out, err, ret_val) = _execute_lego_ev3_process(args)
     if not ret_val:
         LOG.debug("BarePlasticRotateMotor succeeded.")
@@ -110,25 +117,38 @@ def _bare_plastic_rotate_motor(address, port, degrees, speed=None,
 def _power_on(driver_info):
     address = driver_info['address']
     port = driver_info['port']
-    _bare_plastic_action(address, port, '-10', '10')
-    _bare_plastic_action(address, port, '10', '10')
+    degrees = driver_info['lego_move_degrees']
+    press_time = driver_info['lego_press_time_on']
+    _bare_plastic_rotate_motor(address, port, degrees)
+    time.sleep(press_time)
+    _bare_plastic_rotate_motor(address, port, "-" + degrees)
     return states.POWER_ON
 
 
 def _power_off(driver_info):
     address = driver_info['address']
     port = driver_info['port']
-    _bare_plastic_action(address, port, '-10', '10')
-    _bare_plastic_action(address, port, '10', '10')
+    degrees = driver_info['lego_move_degrees']
+    press_time = driver_info['lego_press_time_off']
+    _bare_plastic_rotate_motor(address, port, degrees)
+    time.sleep(press_time)
+    _bare_plastic_rotate_motor(address, port, "-" + degrees)
     return states.POWER_OFF
 
 
 def _parse_driver_info(node):
     lego_address = node.driver_info.get('lego_ev3_address')
     lego_port = node.driver_info.get('lego_ev3_port')
+    lego_press_time_on = (CONF.lego.lego_press_time_on / float(1000))
+    lego_press_time_off = (CONF.lego.lego_press_time_off / float(1000))
+    lego_move_degrees = CONF.lego.lego_move_degrees
+
     return {
         'address': lego_address,
-        'port': lego_port
+        'port': lego_port,
+        'lego_press_time_on': lego_press_time_on,
+        'lego_press_time_off': lego_press_time_off,
+        'lego_move_degrees': lego_move_degrees
     }
 
 
