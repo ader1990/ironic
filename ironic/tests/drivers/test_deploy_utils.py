@@ -169,11 +169,11 @@ class PhysicalWorkTestCase(tests_base.TestCase):
         parent_mock.block_uuid.return_value = root_uuid
         parent_mock.make_partitions.return_value = {'root': root_part,
                                                     'swap': swap_part}
-        calls_expected = [mock.call.get_dev(address, port, iqn, lun),
-                          mock.call.get_image_mb(image_path),
-                          mock.call.discovery(address, port),
+        calls_expected = [mock.call.discovery(address, port),
                           mock.call.login_iscsi(address, port, iqn),
+                          mock.call.get_dev(address, port, iqn, lun),
                           mock.call.is_block_device(dev),
+                          mock.call.get_image_mb(image_path),
                           mock.call.destroy_disk_metadata(dev, node_uuid),
                           mock.call.make_partitions(dev, root_mb, swap_mb,
                                                     ephemeral_mb,
@@ -186,7 +186,7 @@ class PhysicalWorkTestCase(tests_base.TestCase):
                           mock.call.logout_iscsi(address, port, iqn),
                           mock.call.delete_iscsi(address, port, iqn)]
 
-        returned_root_uuid = utils.deploy(address, port, iqn, lun,
+        returned_root_uuid = utils.deploy_partition_image(address, port, iqn, lun,
                                           image_path, root_mb, swap_mb,
                                           ephemeral_mb, ephemeral_format,
                                           node_uuid)
@@ -221,11 +221,11 @@ class PhysicalWorkTestCase(tests_base.TestCase):
         parent_mock.is_block_device.return_value = True
         parent_mock.block_uuid.return_value = root_uuid
         parent_mock.make_partitions.return_value = {'root': root_part}
-        calls_expected = [mock.call.get_dev(address, port, iqn, lun),
-                          mock.call.get_image_mb(image_path),
-                          mock.call.discovery(address, port),
+        calls_expected = [mock.call.discovery(address, port),
                           mock.call.login_iscsi(address, port, iqn),
+                          mock.call.get_dev(address, port, iqn, lun),
                           mock.call.is_block_device(dev),
+                          mock.call.get_image_mb(image_path),
                           mock.call.destroy_disk_metadata(dev, node_uuid),
                           mock.call.make_partitions(dev, root_mb, swap_mb,
                                                     ephemeral_mb,
@@ -236,7 +236,7 @@ class PhysicalWorkTestCase(tests_base.TestCase):
                           mock.call.logout_iscsi(address, port, iqn),
                           mock.call.delete_iscsi(address, port, iqn)]
 
-        returned_root_uuid = utils.deploy(address, port, iqn, lun,
+        returned_root_uuid = utils.deploy_partition_image(address, port, iqn, lun,
                                           image_path, root_mb, swap_mb,
                                           ephemeral_mb, ephemeral_format,
                                           node_uuid)
@@ -276,11 +276,11 @@ class PhysicalWorkTestCase(tests_base.TestCase):
         parent_mock.make_partitions.return_value = {'swap': swap_part,
                                                    'ephemeral': ephemeral_part,
                                                    'root': root_part}
-        calls_expected = [mock.call.get_dev(address, port, iqn, lun),
-                          mock.call.get_image_mb(image_path),
-                          mock.call.discovery(address, port),
+        calls_expected = [mock.call.discovery(address, port),
                           mock.call.login_iscsi(address, port, iqn),
+                          mock.call.get_dev(address, port, iqn, lun),
                           mock.call.is_block_device(dev),
+                          mock.call.get_image_mb(image_path),
                           mock.call.destroy_disk_metadata(dev, node_uuid),
                           mock.call.make_partitions(dev, root_mb, swap_mb,
                                                     ephemeral_mb,
@@ -296,7 +296,7 @@ class PhysicalWorkTestCase(tests_base.TestCase):
                           mock.call.logout_iscsi(address, port, iqn),
                           mock.call.delete_iscsi(address, port, iqn)]
 
-        returned_root_uuid = utils.deploy(address, port, iqn, lun,
+        returned_root_uuid = utils.deploy_partition_image(address, port, iqn, lun,
                                           image_path, root_mb, swap_mb,
                                           ephemeral_mb, ephemeral_format,
                                           node_uuid)
@@ -336,11 +336,11 @@ class PhysicalWorkTestCase(tests_base.TestCase):
                                                    'ephemeral': ephemeral_part,
                                                    'root': root_part}
         parent_mock.block_uuid.return_value = root_uuid
-        calls_expected = [mock.call.get_dev(address, port, iqn, lun),
-                          mock.call.get_image_mb(image_path),
-                          mock.call.discovery(address, port),
+        calls_expected = [mock.call.discovery(address, port),
                           mock.call.login_iscsi(address, port, iqn),
+                          mock.call.get_dev(address, port, iqn, lun),                            
                           mock.call.is_block_device(dev),
+                          mock.call.get_image_mb(image_path),                          
                           mock.call.make_partitions(dev, root_mb, swap_mb,
                                                     ephemeral_mb,
                                                     commit=False),
@@ -353,7 +353,7 @@ class PhysicalWorkTestCase(tests_base.TestCase):
                           mock.call.logout_iscsi(address, port, iqn),
                           mock.call.delete_iscsi(address, port, iqn)]
 
-        returned_root_uuid = utils.deploy(address, port, iqn, lun,
+        returned_root_uuid = utils.deploy_partition_image(address, port, iqn, lun,
                                           image_path, root_mb, swap_mb,
                                           ephemeral_mb, ephemeral_format,
                                           node_uuid, preserve_ephemeral=True)
@@ -399,10 +399,9 @@ class PhysicalWorkTestCase(tests_base.TestCase):
         parent_mock.get_dev.return_value = dev
         parent_mock.get_image_mb.return_value = 1
         parent_mock.work_on_disk.side_effect = TestException
-        calls_expected = [mock.call.get_dev(address, port, iqn, lun),
-                          mock.call.get_image_mb(image_path),
-                          mock.call.discovery(address, port),
+        calls_expected = [mock.call.discovery(address, port),
                           mock.call.login_iscsi(address, port, iqn),
+                          mock.call.get_dev(address, port, iqn, lun),
                           mock.call.work_on_disk(dev, root_mb, swap_mb,
                                                  ephemeral_mb,
                                                  ephemeral_format, image_path,
@@ -410,7 +409,7 @@ class PhysicalWorkTestCase(tests_base.TestCase):
                           mock.call.logout_iscsi(address, port, iqn),
                           mock.call.delete_iscsi(address, port, iqn)]
 
-        self.assertRaises(TestException, utils.deploy,
+        self.assertRaises(TestException, utils.deploy_partition_image,
                           address, port, iqn, lun, image_path,
                           root_mb, swap_mb, ephemeral_mb, ephemeral_format,
                           node_uuid)
@@ -488,6 +487,7 @@ class OtherFunctionTestCase(tests_base.TestCase):
 
 
 @mock.patch.object(disk_partitioner.DiskPartitioner, 'commit', lambda _: None)
+@mock.patch.object(utils, 'get_image_mb', lambda *_: 128)
 class WorkOnDiskTestCase(tests_base.TestCase):
 
     def setUp(self):
@@ -681,6 +681,7 @@ class GetDeviceBlockSizeTestCase(tests_base.TestCase):
 @mock.patch.object(utils, 'is_block_device', lambda d: True)
 @mock.patch.object(utils, 'block_uuid', lambda p: 'uuid')
 @mock.patch.object(utils, 'dd', lambda *_: None)
+@mock.patch.object(utils, 'get_image_mb', lambda *_: 2)
 @mock.patch.object(common_utils, 'mkfs', lambda *_: None)
 # NOTE(dtantsur): destroy_disk_metadata resets file size, disabling it
 @mock.patch.object(utils, 'destroy_disk_metadata', lambda *_: None)

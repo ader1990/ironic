@@ -160,27 +160,34 @@ def _build_pxe_config_options(node, pxe_info, ctx):
     :returns: A dictionary of pxe options to be used in the pxe bootfile
         template.
     """
+    d_info = _parse_deploy_info(node)
+    is_whole_disk_image = d_info['is_whole_disk_image']
+
     if CONF.pxe.ipxe_enabled:
         deploy_kernel = '/'.join([CONF.pxe.http_url, node.uuid,
                                   'deploy_kernel'])
         deploy_ramdisk = '/'.join([CONF.pxe.http_url, node.uuid,
                                    'deploy_ramdisk'])
-        kernel = '/'.join([CONF.pxe.http_url, node.uuid, 'kernel'])
-        ramdisk = '/'.join([CONF.pxe.http_url, node.uuid, 'ramdisk'])
+        if not is_whole_disk_image:
+            kernel = '/'.join([CONF.pxe.http_url, node.uuid, 'kernel'])
+            ramdisk = '/'.join([CONF.pxe.http_url, node.uuid, 'ramdisk'])
     else:
         deploy_kernel = pxe_info['deploy_kernel'][1]
         deploy_ramdisk = pxe_info['deploy_ramdisk'][1]
-        kernel = pxe_info['kernel'][1]
-        ramdisk = pxe_info['ramdisk'][1]
+        if not is_whole_disk_image:
+            kernel = pxe_info['kernel'][1]
+            ramdisk = pxe_info['ramdisk'][1]
 
     pxe_options = {
         'deployment_aki_path': deploy_kernel,
         'deployment_ari_path': deploy_ramdisk,
-        'aki_path': kernel,
-        'ari_path': ramdisk,
         'pxe_append_params': CONF.pxe.pxe_append_params,
         'tftp_server': CONF.pxe.tftp_server
     }
+
+    if not is_whole_disk_image:
+        pxe_options.update({'aki_path': kernel,
+                            'ari_path': ramdisk})
 
     deploy_ramdisk_options = iscsi_deploy.build_deploy_ramdisk_options(node)
     pxe_options.update(deploy_ramdisk_options)
@@ -228,11 +235,15 @@ def _get_image_info(node, ctx):
 
     image_info.update(pxe_utils.get_deploy_kr_info(node.uuid, d_info))
 
+    if d_info['is_whole_disk_image']:
+        return image_info
+
     i_info = node.instance_info
     labels = ('kernel', 'ramdisk')
     if not (i_info.get('kernel') and i_info.get('ramdisk')):
         glance_service = service.Service(version=1, context=ctx)
-        iproperties = glance_service.show(d_info['image_source'])['properties']
+        iproperties = glance_service.show(
+                            d_info['image_source'])['properties']
         for label in labels:
             i_info[label] = str(iproperties[label + '_id']).split('/')[-1]
         node.instance_info = i_info
@@ -242,7 +253,7 @@ def _get_image_info(node, ctx):
         image_info[label] = (
             i_info[label],
             os.path.join(root_dir, node.uuid, label)
-        )
+    )
 
     return image_info
 
@@ -279,7 +290,6 @@ class PXEDeploy(base.DeployInterface):
         :raises: InvalidParameterValue.
         :raises: MissingParameterValue
         """
-
         # Check the boot_mode capability parameter value.
         driver_utils.validate_boot_mode_capability(task.node)
 
@@ -302,9 +312,10 @@ class PXEDeploy(base.DeployInterface):
 
         iscsi_deploy.validate(task)
 
-        props = ['kernel_id', 'ramdisk_id']
-        iscsi_deploy.validate_glance_image_properties(task.context, d_info,
-                                                      props)
+        if not d_info['is_whole_disk_image']:
+            props = ['kernel_id', 'ramdisk_id']
+            iscsi_deploy.validate_glance_image_properties(task.context, d_info,
+                                                          props)
 
     @task_manager.require_exclusive_lock
     def deploy(self, task):
@@ -470,14 +481,16 @@ class VendorPassthru(base.VendorInterface):
         _destroy_token_file(node)
 
         root_uuid = iscsi_deploy.continue_deploy(task, **kwargs)
-
-        if not root_uuid:
+        d_info = _parse_deploy_info(node)
+        is_whole_disk_image = d_info['is_whole_disk_image']
+        if not root_uuid and not is_whole_disk_image:
             return
 
         try:
-            pxe_config_path = pxe_utils.get_pxe_config_file_path(node.uuid)
-            deploy_utils.switch_pxe_config(pxe_config_path, root_uuid,
-                          driver_utils.get_node_capability(node, 'boot_mode'))
+            if not is_whole_disk_image:
+                pxe_config_path = pxe_utils.get_pxe_config_file_path(node.uuid)
+                deploy_utils.switch_pxe_config(pxe_config_path, root_uuid,
+                        driver_utils.get_node_capability(node, 'boot_mode'))
 
             deploy_utils.notify_deploy_complete(kwargs['address'])
 
