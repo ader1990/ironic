@@ -31,6 +31,7 @@ from ironic.drivers.modules import pxe
 from ironic.drivers.modules import seamicro
 from ironic.drivers.modules import snmp
 from ironic.drivers.modules import ssh
+from ironic.drivers.modules import lego
 from ironic.drivers import utils
 
 
@@ -67,6 +68,24 @@ class PXEAndSSHDriver(base.BaseDriver):
         self.power = ssh.SSHPower()
         self.deploy = pxe.PXEDeploy()
         self.management = ssh.SSHManagement()
+        self.vendor = pxe.VendorPassthru()
+
+class PXEAndLEGODriver(base.BaseDriver):
+    """PXE + Lego driver.
+
+    NOTE: This driver is meant only for testing environments.
+
+    This driver implements the `core` functionality, combining
+    :class:`ironic.drivers.lego.LEGO` for power on/off and reboot of virtual
+    machines using a robotic arm, with :class:`ironic.driver.pxe.PXE` for image
+    deployment. Implementations are in those respective classes; this class is
+    merely the glue between them.
+    """
+
+    def __init__(self):
+        self.power = lego.LEGOPower()
+        self.deploy = pxe.PXEDeploy()
+        self.management = lego.LEGOManagement()
         self.vendor = pxe.VendorPassthru()
 
 
