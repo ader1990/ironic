@@ -69,6 +69,7 @@ def _execute_lego_ev3_process(args, shell=False):
     common_args = ['java', '-cp', lego_ev3_classes_jar]
     all_args = common_args + args
     LOG.debug(all_args)
+    return(0,0,0)
     p = subprocess.Popen(all_args,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE,
@@ -118,7 +119,7 @@ def _power_off(driver_info):
     address = driver_info['address']
     port = driver_info['port']
     _bare_plastic_action(address, port, '-10', '10')
-    _bare_plastic_action(address, port, '-10', '10')
+    _bare_plastic_action(address, port, '10', '10')
     return states.POWER_OFF
 
 
@@ -161,15 +162,15 @@ class LEGOPower(base.PowerInterface):
         driver_info = _parse_driver_info(task.node)
 
         if pstate == states.POWER_ON:
-            state = _power_on(driver_info)
+            self._state = _power_on(driver_info)
         elif pstate == states.POWER_OFF:
-            state = _power_off(driver_info)
+            self._state = _power_off(driver_info)
         else:
             raise exception.InvalidParameterValue(
                 _("set_power_state called with invalid power state %s.")
                 % pstate)
 
-        if state != pstate:
+        if self._state != pstate:
             raise exception.PowerStateFailure(pstate=pstate)
 
     @task_manager.require_exclusive_lock
@@ -184,11 +185,11 @@ class LEGOPower(base.PowerInterface):
         driver_info['macs'] = driver_utils.get_node_mac_addresses(task)
         current_pstate = self.get_power_state(task)
         if current_pstate == states.POWER_ON:
-            _power_off(driver_info)
+            self._state=_power_off(driver_info)
 
-        state = _power_on(driver_info)
+        self._state = _power_on(driver_info)
 
-        if state != states.POWER_ON:
+        if self._state != states.POWER_ON:
             raise exception.PowerStateFailure(pstate=states.POWER_ON)
 
 

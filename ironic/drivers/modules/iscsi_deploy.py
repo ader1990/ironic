@@ -124,7 +124,7 @@ def parse_instance_info(node):
     # Internal use only
     i_info['deploy_key'] = info.get('deploy_key')
 
-    deploy_disk = info.get('is_whole_disk_image', 'False')
+    deploy_disk = info.get('is_whole_disk_image', 'True')
     err_msg_invalid = _("Can not validate PXE bootloader. Invalid parameter "
                         "pxe_%(param)s. Reason: %(reason)s")
     try:
