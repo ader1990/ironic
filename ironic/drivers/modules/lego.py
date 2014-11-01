@@ -54,9 +54,9 @@ legoev3_opts = [
                default='1440',
                help='Lego robotic arm move degrees.'),
     cfg.BoolOpt('fake_lego',
-               default='false',
-               help="I set on true, the lego endpoint calls will not be "
-                    "performed")
+                default='false',
+                help="I set on true, the lego endpoint calls will not be "
+                     "performed")
 ]
 
 CONF = cfg.CONF
@@ -85,7 +85,7 @@ def _execute_lego_ev3_process(args, shell=False):
     LOG.debug(all_args)
     if fake_lego:
         LOG.debug("Fake lego endpoint calls")
-        return (0,0,0)
+        return (0, 0, 0)
     else:
         p = subprocess.Popen(all_args,
                              stdout=subprocess.PIPE,
@@ -213,7 +213,7 @@ class LEGOPower(base.PowerInterface):
         driver_info['macs'] = driver_utils.get_node_mac_addresses(task)
         current_pstate = self.get_power_state(task)
         if current_pstate == states.POWER_ON:
-            self._state=_power_off(driver_info)
+            self._state = _power_off(driver_info)
 
         self._state = _power_on(driver_info)
 
