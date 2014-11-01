@@ -52,7 +52,11 @@ legoev3_opts = [
                help='Pressing time for power off.'),
     cfg.StrOpt('lego_move_degrees',
                default='1440',
-               help='Lego robotic arm move degrees.')
+               help='Lego robotic arm move degrees.'),
+    cfg.BoolOpt('fake_lego',
+               default='false',
+               help="I set on true, the lego endpoint calls will not be "
+                    "performed")
 ]
 
 CONF = cfg.CONF
@@ -75,16 +79,20 @@ _BOOT_DEVICES_MAP = {
 
 def _execute_lego_ev3_process(args, shell=False):
     lego_ev3_classes_jar = CONF.lego.lego_ev3_classes_jar
+    fake_lego = CONF.lego.fake_lego
     common_args = ['java', '-cp', lego_ev3_classes_jar]
     all_args = common_args + args
     LOG.debug(all_args)
-    return(0,0,0)
-    p = subprocess.Popen(all_args,
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE,
-                         shell=shell)
-    (out, err) = p.communicate()
-    return (out, err, p.returncode)
+    if fake_lego:
+        LOG.debug("Fake lego endpoint calls")
+        return (0,0,0)
+    else:
+        p = subprocess.Popen(all_args,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             shell=shell)
+        (out, err) = p.communicate()
+        return (out, err, p.returncode)
 
 
 def _bare_plastic_action(address, port, degrees, pause):
